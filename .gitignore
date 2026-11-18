@@ -1,0 +1,18 @@
+# Publish only the application and deployment configuration from this workspace.
+/*
+!/.gitignore
+!/.gitattributes
+!/README.md
+!/app/
+!/.github/
+
+**/node_modules
+**/dist/
+**/outputs/
+**/.env*
+!**/.env.example
+**/*.tsbuildinfo
+**/.DS_Store
+/app/scripts/workbooks/
+/app/docs/screenshots/
+/app/docs/*-result.json

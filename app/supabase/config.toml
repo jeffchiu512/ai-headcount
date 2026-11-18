@@ -1,0 +1,4 @@
+project_id = "jdiocqhgeefbgbksparr"
+
+[functions.headcount-query]
+verify_jwt = true
