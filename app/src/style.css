@@ -38,3 +38,5 @@
 .agency-picker-options p,.agency-picker-help{font-size:13px;color:#6a7a90;line-height:1.7;padding-top:10px}
 .agency-picker-options p{padding:18px 8px}
 @media(max-width:760px){.agency-picker{min-width:100%;max-width:none}.agency-picker-menu{min-width:0}.agency-picker-options{max-height:240px}}
+
+.model-controls{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:20px 0 16px}.model-controls label{display:flex;align-items:center;flex-wrap:wrap;gap:10px;font-size:15px;color:var(--navy)}.model-controls select{max-width:100%;font-size:15px}.model-controls>span{font-size:14px;color:#647185}.result-model{padding:13px 23px;background:#edf5fb;color:#355c82;border-bottom:1px solid #d8e5f0;font-size:14px;overflow-wrap:anywhere}

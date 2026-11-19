@@ -50,3 +50,11 @@ flowchart TD
 ## 2026-11-19 供應商切換
 
 新增 NVIDIA NIM Chat Completions 介接，主模型由 NVIDIA_MODEL 選擇。原有 Google 介接保留，以 LLM_PROVIDER 控制；未明確指定且 NVIDIA_API_KEY 存在時使用 NVIDIA。不會自動向其他供應商傳送問題。兩種介接共用 SQL 語法樹限制、唯讀角色、圖表規格驗證與等待預算。
+
+## Google 主服務與 NVIDIA 備援（2026-11-19）
+
+預設以 Google Gemini `gemini-4-hydrogen` 進行 SQL 與圖表規劃；Google 失敗時切換 NVIDIA NIM，後續階段維持 NVIDIA。前端可改為直接使用 NVIDIA；不會反向切換 Google。所有選項仍須登入並通過原有額度、SQL 與 RLS 檢查。
+
+單次查詢的模型等待預算共 110 秒。Google 每階段最多 30 秒，並保留剩餘時間的 60% 給備援；NVIDIA 單次最多 40 秒，暫時性錯誤最多兩次。安全內容拒絕不跨服務重試。圖表規劃失敗仍可採預設圖表。回應與歷史結果保存 requestedProvider、實際 provider/model、providersUsed、modelsUsed 與備援通知。
+
+Google 優先讀取 GOOGLE_AI_API_KEY，其次 GEMINI_API_KEY、GOOGLE_API_KEY；模型預設固定 Hydrogen，可用新的 GOOGLE_PRIMARY_MODEL 覆寫。舊 GOOGLE_MODEL、GOOGLE_FALLBACK_MODEL、LLM_PROVIDER 不再控制此路由，避免舊 Gemma/NVIDIA 設定覆蓋本次預設。NVIDIA_API_KEY、NVIDIA_MODEL 繼續沿用。

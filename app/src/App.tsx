@@ -24,7 +24,7 @@ function ResultView({result,onAgency}:{result:Result;onAgency?:(code:string)=>vo
  const rows=result.data.slice(page*25,(page+1)*25);
  return <>
   {result.warnings?.map((w,i)=><Notice key={i}>{w}</Notice>)}
-  <section className="panel result-panel">
+  <section className="panel result-panel">{!!result.metadata?.model&&<div className="result-model">實際使用：{result.metadata.provider==='google'?'Google Gemini':result.metadata.provider==='nvidia'?'NVIDIA NIM':'模型服務'} · {String(result.metadata.model)}</div>}
    <div className="panel-head"><div><span className="eyebrow">ANALYSIS RESULT</span><h2>{result.title}</h2></div><button className="button secondary" disabled={exporting||!result.data.length} onClick={async()=>{setExporting(true);setExportError('');try{await exportExcel(result);}catch(e){setExportError((e as Error).message);}finally{setExporting(false);}}}>{exporting?<Spinner/>:<ArrowDownToLine size={16}/>}匯出 Excel</button></div>
    {exportError&&<Notice error>{exportError}</Notice>}
    {result.data.length?(result.presentation.type!=='table'&&<ChartView result={result}/>):<div className="empty-chart">查無符合資料，請調整年度或篩選條件。</div>}
@@ -49,7 +49,8 @@ export default function App(){
  const loadVersion=useRef(0);
  const [comparisonAgencies,setComparisonAgencies]=useState<string[]|null>(null);
  const [page,setPage]=useState<Page>('overview');const [dashboard,setDashboard]=useState<Dashboard>(empty);const [session,setSession]=useState<Session|null>(null);const [busy,setBusy]=useState(true);const [error,setError]=useState('');const [auth,setAuth]=useState(false);const [year,setYear]=useState<number|null>(null);const [category,setCategory]=useState('合計');const [keyword,setKeyword]=useState('');const [withSubs,setWithSubs]=useState(false);const [yearsN,setYearsN]=useState(3);const [threshold,setThreshold]=useState('');const [vacSort,setVacSort]=useState('vacancy_rate');const [selectedAgency,setSelectedAgency]=useState<string|null>(null);
- const [question,setQuestion]=useState('');const [queryBusy,setQueryBusy]=useState(false);const [queryResult,setQueryResult]=useState<Result|null>(null);const [queryMessage,setQueryMessage]=useState('');const [history,setHistory]=useState<{id:string;question:string;title:string;result:Result;created_at:string}[]>([]);const [showHistory,setShowHistory]=useState(false);const [modelStatus,setModelStatus]=useState<{configured:boolean;model:string;provider?:string}|null>(null);
+ const [question,setQuestion]=useState('');const [queryBusy,setQueryBusy]=useState(false);const [queryResult,setQueryResult]=useState<Result|null>(null);const [queryMessage,setQueryMessage]=useState('');const [history,setHistory]=useState<{id:string;question:string;title:string;result:Result;created_at:string}[]>([]);const [showHistory,setShowHistory]=useState(false);const [modelStatus,setModelStatus]=useState<{providers:{provider:string;model:string;configured:boolean}[]}|null>(null);
+ const [queryProvider,setQueryProvider]=useState<'google'|'nvidia'>('google');
  const [source,setSource]=useState<Source>('webhr');const [baseDate,setBaseDate]=useState(today());const [pending,setPending]=useState<{file:string;records:DataRow[];source:Source}|null>(null);const [importBusy,setImportBusy]=useState(false);const [importMessage,setImportMessage]=useState('');
 
  async function load(currentSession:Session|null){
@@ -117,7 +118,7 @@ export default function App(){
   if(!session){setAuth(true);return;}if(queryBusy||!q.trim())return;
   setQuestion(q);setQueryBusy(true);setQueryMessage('');setQueryResult(null);
   try{
-   const {data,error}=await supabase.functions.invoke('headcount-query',{body:{question:q}});
+   const {data,error}=await supabase.functions.invoke('headcount-query',{body:{question:q,provider:queryProvider}});
    if(error){let message=error.message;try{message=(await error.context.json()).error||message;}catch{}throw Error(message);}
    if(data.error)throw Error(data.error);
    if(data.clarification)setQueryMessage(data.clarification);else{setQueryResult(data);void loadHistory();}
@@ -152,8 +153,8 @@ export default function App(){
    {page==='additions'&&<ResultView result={makeResult('各年度核增趨勢',Array.from({length:displayAgencies.length?yearsN:0},(_,i)=>firstAdditionYear+i).map(y=>{const selectedCodes=displayAgencies.map(a=>a.agency_code);const codes=withSubs?dashboard.agencies.filter(a=>selectedCodes.includes(a.agency_code)||selectedCodes.includes(a.parent_code)).map(a=>a.agency_code):selectedCodes;const rs=dashboard.additions.filter(r=>r.year===y&&codes.includes(r.agency_code));return {year:y,additions:rs.length===codes.length*4?sum(rs,'additions'):null};}),'year',['additions'],'line')}/>}
   </>}
   {page==='query'&&<>
-   <section className="query-hero"><div className="query-heading"><span className="sparkle-box"><Sparkles size={23}/></span><div><h2>您想了解哪些員額資訊？</h2><p>比較、排名、趨勢，或跨來源交叉分析。</p></div><span className="model-tag">{modelStatus?.model||'智慧分析'}</span></div><form onSubmit={e=>{e.preventDefault();void ask();}}><textarea aria-label="分析問題" placeholder="例如：哪些機關近三年持續核增，目前缺額率仍高於 10%？" value={question} maxLength={2000} onChange={e=>setQuestion(e.target.value)} disabled={queryBusy}/><div className="query-bottom"><span>請使用公開或示範資料提問，問題與欄位定義將送至所設定的模型服務。</span><button className="button primary" disabled={queryBusy||!question.trim()}>{queryBusy?<Spinner/>:<Sparkles size={15}/>} {queryBusy?'分析中…':'開始分析'}<ArrowRight size={15}/></button></div></form><div className="query-examples">{examples.map((q,i)=><button key={q} disabled={queryBusy} onClick={()=>void ask(q)}><span>0{i+1}</span>{q}<ArrowRight size={13}/></button>)}</div></section>
-   {modelStatus&&!modelStatus.configured&&<Notice error>模型設定不完整，請於 Supabase Secrets 設定供應商的 API Key 與模型名稱。</Notice>}
+   <section className="query-hero"><div className="query-heading"><span className="sparkle-box"><Sparkles size={23}/></span><div><h2>您想了解哪些員額資訊？</h2><p>比較、排名、趨勢，或跨來源交叉分析。</p></div><span className="model-tag">{modelStatus?.providers?.find(p=>p.provider===queryProvider)?.model||(queryProvider==='google'?'gemini-4-hydrogen':'NVIDIA NIM')}</span></div><div className="model-controls"><label>模型服務<select aria-label="模型服務" value={queryProvider} disabled={queryBusy} onChange={e=>setQueryProvider(e.target.value as 'google'|'nvidia')}><option value="google">Google Gemini（優先，失敗自動備援）</option><option value="nvidia">NVIDIA NIM（直接使用）</option></select></label><span>{queryProvider==='google'?'Google 無法完成時，自動改用 NVIDIA NIM。':'本次查詢直接使用 NVIDIA NIM。'}</span></div><form onSubmit={e=>{e.preventDefault();void ask();}}><textarea aria-label="分析問題" placeholder="例如：哪些機關近三年持續核增，目前缺額率仍高於 10%？" value={question} maxLength={2000} onChange={e=>setQuestion(e.target.value)} disabled={queryBusy}/><div className="query-bottom"><span>請使用公開或示範資料提問，問題與欄位定義將送至所設定的模型服務。</span><button className="button primary" disabled={queryBusy||!question.trim()}>{queryBusy?<Spinner/>:<Sparkles size={15}/>} {queryBusy?'分析中…':'開始分析'}<ArrowRight size={15}/></button></div></form><div className="query-examples">{examples.map((q,i)=><button key={q} disabled={queryBusy} onClick={()=>void ask(q)}><span>0{i+1}</span>{q}<ArrowRight size={13}/></button>)}</div></section>
+   {modelStatus&&modelStatus.providers?.find(p=>p.provider===queryProvider)?.configured===false&&<Notice error>模型設定不完整，請於 Supabase Secrets 設定供應商的 API Key 與模型名稱。</Notice>}
    {queryBusy&&<div className="query-progress"><Spinner/><div>正在理解問題、查詢資料與規劃圖表…<small>可能需要約一分鐘；模型服務繁忙時會顯示錯誤。</small></div></div>}
    {queryMessage&&<Notice>{queryMessage}</Notice>}
    {queryResult&&<ResultView result={queryResult}/>}

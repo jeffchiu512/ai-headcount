@@ -37,10 +37,12 @@ Deno.serve(async(req:Request)=>{
     const bodyText=await req.text();
     if(bodyText.length>12000)return reply({error:'請縮短查詢內容'},413);
     const body=JSON.parse(bodyText);
-    const config=readModelConfig();
-    const {model,provider,fallbackModel}=config;
-    if(body.action==='status')return reply({configured:!!config.apiKey&&!!model,model,provider,fallbackModel});
-    const modelClient=new ModelClient(config);
+    if(body.provider!==undefined&&!['google','nvidia'].includes(body.provider))return reply({error:'模型服務僅支援 google 或 nvidia。'},400);
+    const requestedProvider=body.provider||'google';
+    const config=readModelConfig(requestedProvider);
+    const providers=['google','nvidia'].map(p=>{const c=readModelConfig(p as 'google'|'nvidia');return {provider:c.provider,model:c.model,configured:!!c.apiKey&&!!c.model};});
+    if(body.action==='status')return reply({configured:!!config.apiKey&&!!config.model,model:config.model,provider:config.provider,defaultProvider:'google',providers,fallbackProvider:requestedProvider==='google'?'nvidia':null});
+    const modelClient=new ModelClient(config,110_000,requestedProvider==='google'?readModelConfig('nvidia'):undefined);
     const generate=(prompt:string,maxTokens?:number)=>modelClient.generate(prompt,maxTokens);
     const question=typeof body.question==='string'?body.question.trim():'';
     if(!question||question.length>2000)return reply({error:'問題長度須為 1–2,000 字'},400);
@@ -84,7 +86,7 @@ Deno.serve(async(req:Request)=>{
     if(truncated)warnings.push('結果超過 500 筆，僅顯示前 500 筆。請縮小查詢範圍後再分析完整結果。');
     const result={title:String(plan.title||'查詢結果').slice(0,150),data:rows,columns,presentation,sql,
       assumptions:Array.isArray(plan.assumptions)?plan.assumptions.filter((v:any)=>typeof v==='string').slice(0,8).map((s:string)=>s.slice(0,400)):[],warnings,
-      metadata:{provider,model,modelsUsed:[...modelClient.usedModels],generatedAt:new Date().toISOString(),sources:dashboard.sources,truncated,rowCount:rows.length,formula:'缺額率＝缺額÷預算員額；核增不含核減與移撥。',presentationOrigin:'模型建議經欄位驗證；數值取自資料庫'}};
+      metadata:{requestedProvider,provider:modelClient.provider,model:modelClient.model,providersUsed:[...modelClient.usedProviders],modelsUsed:[...modelClient.usedModels],generatedAt:new Date().toISOString(),sources:dashboard.sources,truncated,rowCount:rows.length,formula:'缺額率＝缺額÷預算員額；核增不含核減與移撥。',presentationOrigin:'模型建議經欄位驗證；數值取自資料庫'}};
     const {error:historyError}=await admin.from('headcount_query_history').insert({owner_id:user.id,question,sql,title:result.title,result});
     if(historyError)result.warnings.push('查詢結果已產生，但歷史紀錄儲存失敗。');
     return reply(result);

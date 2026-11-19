@@ -43,28 +43,18 @@ Supabase 開發專案：`ai-headcount`，Project Ref：`jdiocqhgeefbgbksparr`。
 
 ## 模型與 Edge Function
 
-目前支援 NVIDIA NIM（Chat Completions）與 Google。當 `NVIDIA_API_KEY` 已設定時，預設使用 NVIDIA；如需明確指定，可設定 `LLM_PROVIDER=nvidia` 或 `google`。不會跨供應商自動備援。
-
-NVIDIA 設定：
-
-- `NVIDIA_API_KEY`：NVIDIA API Catalog 金鑰。
-- `NVIDIA_MODEL`：完整模型 ID；目前已驗證 `nvidia/nemotron-3-ultra-550b-a55b`。
-- `NVIDIA_FALLBACK_MODEL`：選用，預設不跨模型備援。
-
-NVIDIA 請求送到固定的 `https://integrate.api.nvidia.com/v1/chat/completions`，以 Bearer Key 驗證；模型金鑰只留在 Edge Function。Google 的 Secrets 可以保留，NVIDIA 模式不會讀取或使用 Google 金鑰。
-
-以下為原 Google 設定（選用）：
-
-已部署 `headcount-query`，開啟 `verify_jwt` 並在函式內驗證使用者。Google 模式預設模型為 `gemma-4-31b-it`；NVIDIA 模式採用 `NVIDIA_MODEL`。
+目前支援 NVIDIA NIM（Chat Completions）與 Google。預設使用 Google Gemini `gemini-4-hydrogen`，失敗自動切換 NVIDIA NIM。前端可改為直接使用 NVIDIA，結果會顯示實際服務及模型。舊 `LLM_PROVIDER`、`GOOGLE_MODEL` 與同供應商備援模型設定不再使用。
 
 Secrets：
 
-- `GOOGLE_AI_API_KEY`：Google AI Studio API Key。相容 `GEMINI_API_KEY`、`GOOGLE_API_KEY`。
-- `GOOGLE_MODEL`：選用，用來切換模型。
-- `GOOGLE_FALLBACK_MODEL`：選用，預設 `gemma-4-26b-a4b-it`。遇到暫時性錯誤時，最多嘗試兩次主要模型，再嘗試一次備援；設為空字串可停用跨模型備援。
+- `GOOGLE_AI_API_KEY`：Google AI Studio API Key，相容 `GEMINI_API_KEY`、`GOOGLE_API_KEY`（依此順序取第一個非空值）。
+- `GOOGLE_PRIMARY_MODEL`：選用，預設 `gemini-4-hydrogen`。舊 `GOOGLE_MODEL` 不再使用。
+- `NVIDIA_API_KEY`：NVIDIA API Catalog 金鑰。
+- `NVIDIA_MODEL`：完整模型 ID，預設 `nvidia/nemotron-3-ultra-550b-a55b`。
 
-模型暫時不可用、速率限制與金鑰權限錯誤會分別顯示。各模型呼叫採有限次退避重試，SQL 規劃、修正與圖表推薦共用 110 秒等待預算，單次模型呼叫上限 60 秒；圖表推薦失敗時保留資料表與預設圖表。503 重試仍失敗時需等待 Google 服務恢復，不代表 API Key 一定有問題。日誌僅記錄模型、HTTP 狀態與錯誤分類，不記錄金鑰、問題或資料內容。
-- Supabase URL 與伺服器金鑰使用 Edge Runtime 提供的環境變數，不放進前端。
+已部署 `headcount-query`，保留 `verify_jwt` 並在函式內驗證使用者。前端僅可指定 `google` 或 `nvidia`，不能指定任意模型、URL 或金鑰。Google 使用固定 GenerateContent 端點；NVIDIA 使用固定 `https://integrate.api.nvidia.com/v1/chat/completions`。金鑰與 Supabase 伺服器金鑰皆留在 Edge Runtime。
+
+Google 失敗時直接切換 NVIDIA，後續 SQL 修正與圖表階段維持 NVIDIA；手動選 NVIDIA 時不反向切換 Google。安全內容拒絕不跨服務重試。SQL 規劃、修正與圖表推薦共用 110 秒等待預算，Google 單次最多 30 秒且保留備援時間，NVIDIA 單次最多 40 秒、暫時性錯誤最多嘗試兩次。圖表推薦失敗時保留資料表與預設圖表。日誌不記錄金鑰、問題或資料內容；結果顯示實際服務、模型與備援提示。
 
 第一次模型呼叫取得查詢計畫與 SQL，必要時最多修正一次。第二階段取得圖表種類、欄位對應、分組；僅傳結果欄位與筆數，圖表數值由資料庫結果直接填入。模型不產生可執行前端程式碼，也不重新抄寫圖表數字。第二階段失敗可降級為預設圖表。第一版用口徑說明呈現分析背景，尚未增加獨立的模型敘事摘要。
 
